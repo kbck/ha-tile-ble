@@ -1,0 +1,36 @@
+{
+  "title": "Tile BLE",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add an owned Tile",
+        "description": "Enter this Tile's Web API ID and hex or padded Base64 auth key. Keep it near a Bluetooth adapter or proxy to validate the credentials. Tile auth keys are different from Bluetooth IRKs.",
+        "data": {
+          "name": "Name",
+          "tile_id": "Tile ID (hex)",
+          "auth_key": "Auth key (hex or Base64)",
+          "allow_unseen": "Allow setup without seeing the Tile"
+        }
+      },
+      "reconfigure": {
+        "title": "Replace Tile auth key",
+        "data": {
+          "auth_key": "Auth key (hex or Base64)",
+          "allow_unseen": "Allow setup without seeing the Tile"
+        },
+        "description": "Keep the Tile nearby to validate its replacement key, or allow setup without seeing it."
+      }
+    },
+    "error": {
+      "invalid_name": "Enter a name for this Tile.",
+      "no_scanners": "No Bluetooth scanners are registered. Add an adapter or proxy, or allow setup without seeing the Tile.",
+      "not_seen": "No matching Tile is currently available through Home Assistant Bluetooth. Bring the Tile nearby and retry, check the credentials, or allow setup without seeing it.",
+      "invalid_credentials": "Enter an eight-byte Tile ID in hex and a sixteen-byte auth key in hex or padded Base64."
+    },
+    "abort": {
+      "already_configured": "This Tile is already configured.",
+      "reconfigure_successful": "The Tile auth key has been updated.",
+      "unique_id_mismatch": "The Tile ID does not match this entry."
+    }
+  }
+}

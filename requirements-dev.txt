@@ -1,0 +1,4 @@
+pytest>=8.0,<9
+ruff>=0.11,<1
+voluptuous>=0.15,<1
+tile-identity-resolver==0.1.0

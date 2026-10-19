@@ -1,0 +1,20 @@
+{
+  "domain": "tile_ble",
+  "name": "Tile BLE",
+  "version": "0.1.0",
+  "config_flow": true,
+  "dependencies": [
+    "bluetooth"
+  ],
+  "codeowners": [
+    "@kbck"
+  ],
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "requirements": [
+    "bluetooth-data-tools==1.29.24",
+    "tile-identity-resolver==0.1.0"
+  ],
+  "documentation": "https://github.com/kbck/ha-tile-ble",
+  "issue_tracker": "https://github.com/kbck/ha-tile-ble/issues"
+}
