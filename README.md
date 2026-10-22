@@ -69,9 +69,11 @@ not guarantee connection availability. Authentication belongs to the consumer.
 
 ## Development
 
-Install the dependencies first:
+Use Python 3.14 for the HA test framework:
 
 ```sh
+python3.14 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 bash scripts/test.sh
 ```
@@ -83,8 +85,10 @@ Run `bash scripts/hassfest.sh` for hassfest (requires Docker), or
 environment, falling back to `.venv`, `venv`, or `python3`; set `PYTHON` to
 select another interpreter. Run `bash scripts/test.sh --help` for options.
 
-Tests use the real resolver with HA stubs and dummy credentials. Radio behavior
-still needs testing on HA. Protocol scope is documented in the
+Tests use Home Assistant's test fixtures, the real resolver, and synthetic
+credentials and Bluetooth advertisements. Config flows, entities, setup, and
+unloading run through HA; Bluetooth hardware calls are mocked. Radio behavior
+still needs testing on live HA. Protocol scope is documented in the
 [resolver documentation](https://github.com/kbck/tile-identity-resolver#protocol-scope).
 
 This integration does not ring Tiles, retrieve credentials, or provide room

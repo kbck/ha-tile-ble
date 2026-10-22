@@ -21,8 +21,9 @@ Examples:
   bash scripts/test.sh coverage -x
   bash scripts/test.sh all
 
-Uses PYTHON if set, then the active virtual environment, .venv, venv,
-or python3. Install requirements-dev.txt into that environment first.
+Requires Python 3.14 or newer for HA's test framework. Uses PYTHON if set,
+then the active virtual environment, .venv, venv, or python3.
+Install requirements-dev.txt into that environment first.
 EOF
 }
 
@@ -50,6 +51,12 @@ elif [[ -x venv/bin/python ]]; then
 else
     test_python=python3
 fi
+
+"$test_python" -c '
+import sys
+if sys.version_info < (3, 14):
+    sys.exit("HA tests require Python 3.14+. Activate a Python 3.14 .venv or set PYTHON to its interpreter.")
+'
 
 if [[ "$mode" == tests ]]; then
     "$test_python" -m pytest -q "$@"

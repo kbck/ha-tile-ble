@@ -1,5 +1,7 @@
-pytest>=8.0,<9
-pytest-cov>=6,<8
+pytest-homeassistant-custom-component==0.13.373
+# Dependencies imported by HA's Bluetooth and USB integrations during tests.
+aiousbwatcher==1.1.2
+serialx==1.11.0
+dbus-fast==5.0.22
 ruff>=0.11,<1
-voluptuous>=0.15,<1
 tile-identity-resolver==0.1.0
