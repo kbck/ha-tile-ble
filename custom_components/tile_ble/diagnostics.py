@@ -1,11 +1,15 @@
 """Return status without credentials, addresses, sources, or private IDs."""
 
-from .const import CONF_TILE_ID, DOMAIN
+from .models import TileConfigEntry
 
 
-async def async_get_config_entry_diagnostics(hass, entry):
-    coordinator = hass.data.get(DOMAIN)
-    state = coordinator.tiles.get(entry.data[CONF_TILE_ID]) if coordinator else None
+async def async_get_config_entry_diagnostics(hass, entry: TileConfigEntry):
+    runtime_data = getattr(entry, "runtime_data", None)
+    state = None
+    if runtime_data is not None:
+        state = runtime_data.coordinator.tiles.get(runtime_data.state.tile_id)
+        if state is not runtime_data.state:
+            state = None
     return {
         "identity_resolver": "tile-identity-resolver",
         "loaded": state is not None,

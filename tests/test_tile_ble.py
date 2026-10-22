@@ -160,6 +160,11 @@ def component():
 
     config_entries = modules["homeassistant.config_entries"]
     config_entries.ConfigFlow = Flow
+    class ConfigEntry:
+        def __class_getitem__(cls, item):
+            return cls
+
+    config_entries.ConfigEntry = ConfigEntry
     old = {
         name: value
         for name, value in sys.modules.items()
@@ -319,9 +324,13 @@ def test_entities_follow_ha_unavailability_and_keep_historical_diagnostics(compo
     async def run():
         coordinator = component.manager.TileCoordinator(SimpleNamespace())
         add_tile(coordinator, Tile(TILE_A, AUTH_KEY))
-        tracker = component.tracker.TileTracker(coordinator, entry())
+        tile_entry = entry()
+        tile_entry.runtime_data = component.integration.TileRuntimeData(
+            coordinator, coordinator.tiles[TILE_A]
+        )
+        tracker = component.tracker.TileTracker(tile_entry)
         sensors = {
-            d.key: component.sensor.TileSensor(coordinator, entry(), d)
+            d.key: component.sensor.TileSensor(tile_entry, d)
             for d in component.sensor.SENSORS
         }
         entities = [tracker, *sensors.values()]
@@ -374,6 +383,10 @@ def test_real_library_matches_multiple_tiles_and_returns_metadata(component):
         await component.integration.async_setup_entry(hass, first_entry)
         await component.integration.async_setup_entry(hass, second_entry)
         coordinator = hass.data[DOMAIN]
+        assert first_entry.runtime_data.coordinator is coordinator
+        assert second_entry.runtime_data.coordinator is coordinator
+        assert first_entry.runtime_data.state is coordinator.tiles[TILE_A]
+        assert second_entry.runtime_data.state is coordinator.tiles[TILE_B]
         first = service_info(
             PRIVATE_A_NEXT,
             service_data={
@@ -503,6 +516,50 @@ def test_setup_unload_and_failed_setup_cleanup(component):
         with pytest.raises(component.integration.ConfigEntryError):
             await component.integration.async_setup_entry(hass, entry(auth_key="bad"))
         assert DOMAIN not in hass.data
+
+    asyncio.run(run())
+
+
+def test_platforms_and_diagnostics_use_entry_runtime_data(component):
+    async def run():
+        hass = hass_stub()
+        tile_entry = entry()
+        trackers, sensors = [], []
+
+        async def forward(entry, platforms):
+            # Runtime data must be ready before HA sets up either platform.
+            assert entry.runtime_data.state.tile_id == TILE_A
+            # Platforms and diagnostics must not look up the shared registry.
+            platform_hass = SimpleNamespace(data={})
+            await component.tracker.async_setup_entry(
+                platform_hass, entry, trackers.extend
+            )
+            await component.sensor.async_setup_entry(
+                platform_hass, entry, sensors.extend
+            )
+
+        hass.config_entries.async_forward_entry_setups.side_effect = forward
+        assert await component.integration.async_setup_entry(hass, tile_entry)
+        assert len(trackers) == 1
+        assert len(sensors) == len(component.sensor.SENSORS)
+        state = tile_entry.runtime_data.state
+        assert all(entity._state is state for entity in [*trackers, *sensors])
+        observe(component, hass.data[DOMAIN], 100, service_info(PRIVATE_A))
+        diagnostics = component.diagnostics.async_get_config_entry_diagnostics
+        assert await diagnostics(SimpleNamespace(data={}), tile_entry) == {
+            "identity_resolver": "tile-identity-resolver",
+            "loaded": True,
+            "present": True,
+            "seen": True,
+        }
+        hass.config_entries.async_unload_platforms.return_value = False
+        assert not await component.integration.async_unload_entry(hass, tile_entry)
+        assert tile_entry.runtime_data.state is state
+        assert (await diagnostics(hass, tile_entry))["loaded"]
+        hass.config_entries.async_unload_platforms.return_value = True
+        assert await component.integration.async_unload_entry(hass, tile_entry)
+        assert not (await diagnostics(hass, tile_entry))["loaded"]
+        assert not (await diagnostics(hass, entry()))["loaded"]
 
     asyncio.run(run())
 

@@ -11,11 +11,12 @@ from .const import (
     CONF_TILE_ID,
 )
 from .coordinator import async_add_tile, async_remove_tile
+from .models import TileConfigEntry, TileRuntimeData
 
 PLATFORMS = [Platform.DEVICE_TRACKER, Platform.SENSOR]
 
 
-async def async_setup_entry(hass, entry):
+async def async_setup_entry(hass, entry: TileConfigEntry):
     """Prepare the resolver off-loop, then register on the HA loop."""
     try:
         tile = await hass.async_add_executor_job(
@@ -26,7 +27,8 @@ async def async_setup_entry(hass, entry):
             "Invalid Tile credentials; reconfigure this Tile"
         ) from None
 
-    await async_add_tile(hass, tile)
+    coordinator = await async_add_tile(hass, tile)
+    entry.runtime_data = TileRuntimeData(coordinator, coordinator.tiles[tile.tile_id])
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except (Exception, asyncio.CancelledError):
@@ -35,7 +37,7 @@ async def async_setup_entry(hass, entry):
     return True
 
 
-async def async_unload_entry(hass, entry):
+async def async_unload_entry(hass, entry: TileConfigEntry):
     """Release the Tile and stop shared subscriptions after the final unload."""
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False

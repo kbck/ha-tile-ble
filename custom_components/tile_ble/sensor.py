@@ -18,8 +18,8 @@ from homeassistant.const import (
     UnitOfTime,
 )
 
-from .const import DOMAIN
 from .entity import TileEntity
+from .models import TileConfigEntry
 
 
 def estimated_distance(state):
@@ -102,18 +102,18 @@ SENSORS = (
 )
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(hass, entry: TileConfigEntry, async_add_entities):
     async_add_entities(
-        TileSensor(hass.data[DOMAIN], entry, description) for description in SENSORS
+        TileSensor(entry, description) for description in SENSORS
     )
 
 
 class TileSensor(TileEntity, SensorEntity):
     """Expose diagnostics without exposing private IDs or auth keys."""
 
-    def __init__(self, coordinator, entry, description):
+    def __init__(self, entry: TileConfigEntry, description):
         self.entity_description = description
-        super().__init__(coordinator, entry, description.key)
+        super().__init__(entry, description.key)
 
     @property
     def available(self):

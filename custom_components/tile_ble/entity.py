@@ -3,7 +3,8 @@
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import CONF_TILE_ID, DOMAIN
+from .const import DOMAIN
+from .models import TileConfigEntry
 
 
 class TileEntity(Entity):
@@ -12,9 +13,9 @@ class TileEntity(Entity):
     _attr_should_poll = False
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, entry, key):
-        self._coordinator = coordinator
-        self._state = coordinator.tiles[entry.data[CONF_TILE_ID]]
+    def __init__(self, entry: TileConfigEntry, key):
+        self._coordinator = entry.runtime_data.coordinator
+        self._state = entry.runtime_data.state
         self._attr_unique_id = f"{self._state.tile_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._state.tile_id)},

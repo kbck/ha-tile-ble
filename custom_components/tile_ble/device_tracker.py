@@ -2,12 +2,12 @@
 
 from homeassistant.components.device_tracker import BaseScannerEntity, SourceType
 
-from .const import DOMAIN
 from .entity import TileEntity
+from .models import TileConfigEntry
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([TileTracker(hass.data[DOMAIN], entry)])
+async def async_setup_entry(hass, entry: TileConfigEntry, async_add_entities):
+    async_add_entities([TileTracker(entry)])
 
 
 class TileTracker(TileEntity, BaseScannerEntity):
@@ -16,8 +16,8 @@ class TileTracker(TileEntity, BaseScannerEntity):
     _attr_name = None
     _attr_source_type = SourceType.BLUETOOTH_LE
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry, "tracker")
+    def __init__(self, entry: TileConfigEntry):
+        super().__init__(entry, "tracker")
 
     @property
     def is_connected(self):
