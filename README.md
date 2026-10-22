@@ -28,6 +28,18 @@ Setup normally requires a matching observation. **Allow setup without seeing the
 Tile** skips radio validation; an unseen Tile starts away. Use **Reconfigure** to
 replace its key.
 
+## Removal
+
+To remove a Tile, go to **Settings > Devices & services > Tile BLE**. Open the
+three-dot menu next to its entry and select **Delete**.
+
+To uninstall the integration completely:
+
+1. Delete all Tile BLE entries as described above.
+2. Remove **Tile BLE** in HACS. For a manual installation, delete
+   `custom_components/tile_ble` from your HA configuration directory.
+3. Restart Home Assistant.
+
 ## Entities and Presence
 
 Each Tile gets a stable Bluetooth LE tracker reporting home/away across address
