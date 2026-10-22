@@ -7,10 +7,7 @@ integration manages HA entities, address rotation, and availability.
 
 ## Installation
 
-Requires HA Core 2026.10 or newer for the Bluetooth
-`async_register_advertisement_callback` API, which delivers repeated advertisements
-even when their contents have not changed.
-The normal manifest requires `tile-identity-resolver==0.1.0` from PyPI.
+Requires HA Core 2026.10 or newer.
 
 ### HACS
 
@@ -25,7 +22,7 @@ directory and restart.
 
 Add **Tile BLE** under **Settings > Devices & services**. Enter a name, eight-byte
 Tile Web API ID in hex, and sixteen-byte auth key in hex or padded Base64.
-Credential retrieval is not included. These are Tile credentials, not a Bluetooth IRK.
+Credential retrieval is not included.
 
 Setup normally requires a matching observation. **Allow setup without seeing the
 Tile** skips radio validation; an unseen Tile starts away. Use **Reconfigure** to
@@ -37,12 +34,6 @@ Each Tile gets a stable Bluetooth LE tracker reporting home/away across address
 rotations. Its `current_address` and `source` attributes expose the latest resolved
 address and scanner.
 
-MAC address changes are logged at DEBUG level with the Tile ID and old and new
-addresses. The first observation does not log an address change.
-Accepted resolved advertisements are also logged at DEBUG level with the Tile
-ID, MAC address, scanner source, RSSI, and FEED counter. Auth keys, raw payloads,
-and private IDs are omitted.
-
 Optional diagnostic sensors provide RSSI, transmit power, estimated distance,
 broadcast interval, private-ID counter, FEED version, and raw flags. Enable them
 in entity settings. Distance is approximate and needs usable transmit power.
@@ -51,11 +42,6 @@ Every matching observation establishes presence regardless of RSSI. HA Bluetooth
 decides when the Tile disappears; this can take several minutes. All scanners
 count for presence, including those unable to make connections. Apply RSSI
 filters or extra departure delays in automations.
-
-Unsupported, ambiguous, and out-of-order observations do not establish presence.
-
-Keys are stored in config entries and held by the resolver at runtime. Entity
-attributes and downloaded diagnostics omit keys and private IDs.
 
 ## API for Other Integrations
 
@@ -83,10 +69,9 @@ not guarantee connection availability. Authentication belongs to the consumer.
 
 ## Development
 
-Install the local library first while it is unpublished:
+Install the dependencies first:
 
 ```sh
-python -m pip install ../tile-identity-resolver
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 python -m ruff check custom_components tests
