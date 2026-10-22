@@ -5,13 +5,14 @@ import base64
 import importlib
 import logging
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from tile_identity_resolver import Tile
+from tile_identity_resolver import Tile, TileResolver
 
 DOMAIN = "tile_ble"
 PACKAGE = f"custom_components.{DOMAIN}"
@@ -237,6 +238,12 @@ def observe(component, coordinator, now, *infos):
         coordinator._async_advertisement(info, None)
 
 
+def add_tile(coordinator, tile):
+    """Provide a complete prepared resolver for synchronous coordinator tests."""
+    resolver = TileResolver((*coordinator._resolver.tiles, tile))
+    return coordinator.add_tile(tile, resolver)
+
+
 def unavailable(component, info, index=-1):
     component.unavailable_addresses.add(info.address)
     component.unavailable_registrations[index][0](info)
@@ -311,7 +318,7 @@ def test_config_validation_offline_duplicates_and_reconfigure(component):
 def test_entities_follow_ha_unavailability_and_keep_historical_diagnostics(component):
     async def run():
         coordinator = component.manager.TileCoordinator(SimpleNamespace())
-        coordinator.add_tile(Tile(TILE_A, AUTH_KEY))
+        add_tile(coordinator, Tile(TILE_A, AUTH_KEY))
         tracker = component.tracker.TileTracker(coordinator, entry())
         sensors = {
             d.key: component.sensor.TileSensor(coordinator, entry(), d)
@@ -391,7 +398,7 @@ def test_real_library_matches_multiple_tiles_and_returns_metadata(component):
 def test_rotation_and_availability_follow_ha_callbacks(component):
     hass = hass_stub()
     coordinator = hass.data[DOMAIN] = component.manager.TileCoordinator(hass)
-    state = coordinator.add_tile(Tile(TILE_A, AUTH_KEY))
+    state = add_tile(coordinator, Tile(TILE_A, AUTH_KEY))
     resolved, lost = Mock(), Mock()
     cancel_resolved = component.api.async_track_service_info(hass, resolved, TILE_A)
     cancel_lost = component.api.async_track_unavailable(hass, lost, TILE_A)
@@ -424,7 +431,7 @@ def test_rotation_and_availability_follow_ha_callbacks(component):
 
 def test_debug_logs_only_counter_and_mac_changes(component, caplog):
     coordinator = component.manager.TileCoordinator(hass_stub())
-    state = coordinator.add_tile(Tile(TILE_A, AUTH_KEY))
+    state = add_tile(coordinator, Tile(TILE_A, AUTH_KEY))
     listener = Mock()
     state.service_info_listeners.add(listener)
     caplog.set_level(logging.DEBUG, logger=component.manager.__name__)
@@ -496,5 +503,126 @@ def test_setup_unload_and_failed_setup_cleanup(component):
         with pytest.raises(component.integration.ConfigEntryError):
             await component.integration.async_setup_entry(hass, entry(auth_key="bad"))
         assert DOMAIN not in hass.data
+
+    asyncio.run(run())
+
+
+def test_candidate_generation_runs_in_worker_and_callbacks_run_on_loop(component):
+    async def run():
+        hass = hass_stub()
+        hass.async_add_executor_job.side_effect = asyncio.to_thread
+        loop_thread = threading.get_ident()
+        resolver_module = importlib.import_module("tile_identity_resolver.resolver")
+        generate = resolver_module._generate_private_ids
+        worker_threads = []
+
+        def generate_in_worker(tile):
+            worker_threads.append(threading.get_ident())
+            assert threading.get_ident() != loop_thread
+            return generate(tile)
+
+        def register_on_loop(*args):
+            assert threading.get_ident() == loop_thread
+            return Mock()
+
+        component.bluetooth.async_register_callback.side_effect = register_on_loop
+        with patch.object(resolver_module, "_generate_private_ids", generate_in_worker):
+            assert await component.integration.async_setup_entry(hass, entry())
+        assert worker_threads
+        observe(component, hass.data[DOMAIN], 100, service_info(PRIVATE_A))
+        assert hass.data[DOMAIN].tiles[TILE_A].present
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", ["add", "remove", "replace"])
+def test_resolver_preparation_serializes_concurrent_membership_changes(
+    component, change
+):
+    async def run():
+        hass = hass_stub()
+        await component.integration.async_setup_entry(hass, entry())
+        started, release = asyncio.Event(), asyncio.Event()
+        builds = 0
+
+        async def executor(func, *args):
+            nonlocal builds
+            if func is TileResolver:
+                builds += 1
+                if builds == 1:
+                    started.set()
+                    await release.wait()
+            return await asyncio.to_thread(func, *args)
+
+        hass.async_add_executor_job.side_effect = executor
+        pending = asyncio.create_task(
+            component.integration.async_setup_entry(hass, entry(TILE_B))
+        )
+        await started.wait()
+        third_id = "1122334455667788"
+
+        async def change_membership():
+            if change == "add":
+                await component.integration.async_setup_entry(hass, entry(third_id))
+            else:
+                await component.integration.async_unload_entry(hass, entry())
+                if change == "replace":
+                    await component.integration.async_setup_entry(hass, entry(third_id))
+
+        changing = asyncio.create_task(change_membership())
+        await asyncio.sleep(0)
+        assert not changing.done()
+        # Observations continue using the active resolver during preparation.
+        observe(component, hass.data[DOMAIN], 100, service_info(PRIVATE_A))
+        assert hass.data[DOMAIN].tiles[TILE_A].present
+        release.set()
+        assert await pending
+        await changing
+        coordinator = hass.data[DOMAIN]
+        expected = {TILE_A, TILE_B, third_id} if change == "add" else {TILE_B}
+        if change == "replace":
+            expected.add(third_id)
+        assert set(coordinator.tiles) == expected
+        assert {tile.tile_id for tile in coordinator._resolver.tiles} == expected
+        assert builds == (1 if change == "remove" else 2)
+        observe(component, coordinator, 100, service_info(PRIVATE_B))
+        assert coordinator.tiles[TILE_B].present
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_failed_or_cancelled_preparation_leaves_loaded_resolver_untouched(
+    component, cancel
+):
+    async def run():
+        hass = hass_stub()
+        await component.integration.async_setup_entry(hass, entry())
+        coordinator = hass.data[DOMAIN]
+        resolver = coordinator._resolver
+        started = asyncio.Event()
+
+        async def executor(func, *args):
+            if func is TileResolver:
+                started.set()
+                if cancel:
+                    await asyncio.Event().wait()
+                raise RuntimeError("preparation failed")
+            return func(*args)
+
+        hass.async_add_executor_job.side_effect = executor
+        pending = asyncio.create_task(
+            component.integration.async_setup_entry(hass, entry(TILE_B))
+        )
+        await started.wait()
+        if cancel:
+            pending.cancel()
+        with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
+            await pending
+        assert hass.data[DOMAIN] is coordinator
+        assert coordinator._resolver is resolver
+        assert set(coordinator.tiles) == {TILE_A}
+        observe(component, coordinator, 100, service_info(PRIVATE_A))
+        assert coordinator.tiles[TILE_A].present
 
     asyncio.run(run())

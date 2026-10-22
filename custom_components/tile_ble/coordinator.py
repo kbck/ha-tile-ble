@@ -1,5 +1,6 @@
 """Resolve Tile identities and delegate reachability to HA Bluetooth."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -8,9 +9,40 @@ from homeassistant.components import bluetooth
 from homeassistant.core import callback
 from tile_identity_resolver import TileResolver
 
-from .const import FEED_UUID
+from .const import DOMAIN, FEED_UUID
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _mutation_lock(hass):
+    """Keep one lock across coordinator unloads and reloads."""
+    return hass.data.setdefault(f"{DOMAIN}_lock", asyncio.Lock())
+
+
+async def async_add_tile(hass, tile):
+    """Build a replacement resolver off-loop, then register on the HA loop."""
+    async with _mutation_lock(hass):
+        coordinator = hass.data.get(DOMAIN)
+        tiles = coordinator._resolver.tiles if coordinator else ()
+        resolver = await hass.async_add_executor_job(TileResolver, (*tiles, tile))
+        if coordinator is None:
+            coordinator = hass.data[DOMAIN] = TileCoordinator(hass)
+        try:
+            coordinator.add_tile(tile, resolver)
+        except Exception:
+            if not coordinator.tiles:
+                hass.data.pop(DOMAIN, None)
+            raise
+        return coordinator
+
+
+async def async_remove_tile(hass, tile_id):
+    """Wait for any resolver build before removing a Tile."""
+    async with _mutation_lock(hass):
+        coordinator = hass.data[DOMAIN]
+        coordinator.remove_tile(tile_id)
+        if not coordinator.tiles:
+            hass.data.pop(DOMAIN)
 
 
 def resolve_info(resolver, info):
@@ -65,12 +97,12 @@ class TileCoordinator:
         self._cancel_bluetooth = None
 
     @callback
-    def add_tile(self, tile):
-        """Register a prepared Tile before replaying HA's discovery cache."""
+    def add_tile(self, tile, resolver):
+        """Install a prepared resolver before replaying HA's discovery cache."""
         tile_id = tile.tile_id
         if tile_id in self.tiles:
             raise ValueError("Tile is already loaded")
-        self._resolver.add(tile)
+        self._resolver = resolver
         state = self.tiles[tile_id] = TileState(tile_id)
         try:
             # A newly configured owner can make an already resolved ID ambiguous.
