@@ -73,9 +73,15 @@ Install the dependencies first:
 
 ```sh
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
-python -m ruff check custom_components tests
+bash scripts/test.sh
 ```
+
+This runs tests with branch coverage and Ruff. Use `bash scripts/test.sh tests`
+for tests only, or `bash scripts/test.sh tests -k config` to select tests.
+Run `bash scripts/hassfest.sh` for hassfest (requires Docker), or
+`bash scripts/test.sh all` for all checks. The scripts use your active virtual
+environment, falling back to `.venv`, `venv`, or `python3`; set `PYTHON` to
+select another interpreter. Run `bash scripts/test.sh --help` for options.
 
 Tests use the real resolver with HA stubs and dummy credentials. Radio behavior
 still needs testing on HA. Protocol scope is documented in the
